@@ -1,0 +1,117 @@
+<!doctype html>
+<html>
+<head>
+	<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+	<title>Description about "check_all.c"</title>
+	<style type="text/css">
+		code{
+			font-weight: bold;
+			color: firebrick;
+			font-size: 15px;
+		}
+		sub.explanation{
+			font-style: italic;
+			color: darkgreen;
+		}
+		sub.question{
+			color: red;
+		}
+		div.codeblock{
+			text-align: center;
+		}
+		div.cap{
+			text-align: center;
+			font-weight: bold;
+			font-size: 20px;
+		}
+		mark{
+			background-color: yellow;
+		}
+        p.cite{
+            background-color: whitesmoke;
+            font-family: courier new;
+        }
+        p.challenge{
+            background-color: coral;
+        }
+        ul.challenge{
+            background-color: coral;
+        }
+	</style>
+	<link href="../styles/paraiso-light.css" rel="stylesheet">  
+    <script src="../highlight.pack.js"></script>  
+    <script >hljs.initHighlightingOnLoad();</script>
+<script type="text/x-mathjax-config">
+  MathJax.Hub.Config({tex2jax: {inlineMath: [['$','$'], ['\\(','\\)']]}});
+</script>
+<script type="text/javascript"
+  src="http://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML">
+</script>
+</head> 
+<body>
+    <h3>Source</h3>
+<pre><code class="cpp">
+#include &lt;linux/init.h&gt;
+#include &lt;linux/module.h&gt;
+#include &lt;linux/kernel.h&gt;
+#include &lt;linux/netfilter.h&gt;
+#include &lt;linux/netfilter_ipv4.h&gt;
+
+MODULE_LICENSE("Dual BSD/GPL");
+
+static struct nf_hook_ops nfho;
+
+unsigned int 
+hook_func(const struct nf_hook_ops *ops,
+          struct sk_buff *skb,
+          const struct net_device *in,
+	  const struct net_device *out,
+	  int (*okfn)(struct sk_buff *)
+          ) {
+    printk(KERN_ALERT "A packet is received!\n");
+    return NF_ACCEPT;
+}
+
+static int __init
+init_check(void) {
+    nfho.hook = hook_func;
+    nfho.pf = PF_INET;
+    nfho.priority = NF_IP_PRI_FIRST;
+// At the first time, the following statement is used:
+//  nfho.hooknum = NF_IP_PRE_ROUTING;
+// However, the compiler complains that NF_IP_PRE_ROUTING
+// is not declared. This is because NF_IP_PRE_ROUTING is a
+// user-space macro. When build a module in kernel, the 
+// macro NF_INET_PRE_ROUTING is used as follows.
+    nfho.hooknum = NF_INET_PRE_ROUTING;
+
+    nf_register_hook(&amp;nfho);
+
+    return 0;
+}
+
+static void __exit
+clean_check(void) {
+    nf_unregister_hook(&amp;nfho);
+}
+
+module_init(init_check);
+module_exit(clean_check);
+</code></pre>
+    <h3>Description</h3>
+    <p>在内核中插入这个模块后，每当电脑收到一个IPv4数据包就在终端提醒“A packet is received!”，并接收这个包。使用该模块步骤如下：</p>
+    <h4>1. 编译</h4>
+    <p>首先需要编译这个模块。当然，在编译之前需要编写自己的Makefile文件。写好Makefile后，直接在终端输入<code>make</code>即可。</p>
+    <p>在编译的时候由于内核版本问题，可能无法通过编译，需要根据当前内核版本调整源码内容。其中，最可能导致这种问题的因素为：函数<code>hook_func</code>定义（该函数在不同内核版本中变化较大），<code>nf_register_hook</code>和<code>nf_unregister_hook</code>（在4.13之后这两个函数被其它函数替代）。</p>
+    <p>另外，需要特别注意<code>NF_IP_PRE_ROUTING</code>这个宏。这个宏只定义在用户空间，因此在设计内核模块时，需要用<code>NF_INET_PRE_ROUTING</code>这个宏替代。也就是说，这两个宏具有相同的含义，但是一个在用户空间使用，一个在内核空间使用。本模块须插入内核空间，因此采用<code>NF_INET_PRE_ROUTING</code>。</p>
+    <h4>2. 载入模块</h4>
+    <p>只需要在root权限下采用<code>insmod</code>命令将编译好的<code>check_all.ko</code>模块插入内核即可。</p>
+    <p>插入内核后，<code>printk</code>函数将根据等级打印信息。为了显示任何优先等级的信息，可在终端输入以下命令：</p>
+<pre><code class="bash">
+echo 8 &gt; /proc/sys/kernel/printk
+</code></pre>
+    <p><code>printk</code>打印的信息只会在某个终端上显示，此时可以通过CTRL+ALT+F1(或者F2...F6)的按键组合调整显示终端。或者直接用<code>dmesg</code>命令在终端查看信息。</p>
+    <h4>3. 卸载模块</h4>
+    <p>在使用完模块后，只需要输入<code>rmmod</code>命令移除模块即可。</p>
+</body>
+</html>
